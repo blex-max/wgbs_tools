@@ -97,21 +97,21 @@ class GenomeRefPaths:
         return refdir
 
     def get_chrom_cpg_size_table(self):
-        if self._chrom_cpg_size_table is None:
+        if self._chrom_cpg_size_table is None and self.chrom_cpg_sizes is not None:
             self._chrom_cpg_size_table = pd.read_csv(self.chrom_cpg_sizes,
-                    header=None, names=['chr', 'size'], sep='\t')
+                    header=None, names=['chr', 'size'], dtype={'chr': str, 'size': int}, sep='\t')
         return self._chrom_cpg_size_table
 
     def get_chrom_size_table(self):
-        if self._chrome_size_table is None:
+        if self._chrome_size_table is None and self.chrom_sizes is not None:
             self._chrome_size_table = pd.read_csv(self.chrom_sizes,
-                    header=None, names=['chr', 'size'], sep='\t')
+                    header=None, names=['chr', 'size'], dtype={'chr': str, 'size': int}, sep='\t')
         return self._chrome_size_table
 
     def get_chroms(self):
-        if self._chroms is None:
+        if self._chroms is None and self.chrom_sizes is not None:
             self._chroms = tuple(pd.read_csv(self.chrom_sizes,
-                    header=None, names=['chr'], usecols=[0], sep='\t')['chr'].values)
+                    header=None, names=['chr'], dtype={'chr': str}, usecols=[0], sep='\t')['chr'].values)  # TODO: fix array typing across tool
         return self._chroms
 
 
@@ -216,8 +216,7 @@ def validate_prefix(prefix):
 
 def load_dict(nrows=None, skiprows=None, genome_name=None):
     d_path = GenomeRefPaths(genome_name).dict_path
-    res = pd.read_csv(d_path, header=None, names=['chr', 'start'], sep='\t', usecols=[0, 1],
-                      nrows=nrows, skiprows=skiprows)
+    res = pd.read_csv(d_path, header=None, names=['chr', 'start'], sep='\t', usecols=[0, 1], nrows=nrows, skiprows=skiprows)
     res['idx'] = res.index + 1
     return res
 

@@ -1,4 +1,3 @@
-
 import argparse
 import re
 import shutil
@@ -127,7 +126,8 @@ class InitGenome:
             df = pd.read_csv(fai_path, sep='\t',
                              header=None,
                              usecols=[0, 1, 2, 4],
-                             names=['chr', 'size', 'offset', 'width'])
+                             names=['chr', 'size', 'offset', 'width'],
+                             dtype={'chr': str})  # TODO: replicate array typing elsewhere
             # filter invalid chromosomes
             df = df[df.apply(lambda x: is_valid_chrome(x['chr']), axis=1)]
 
@@ -276,8 +276,8 @@ def chromosome_order(c):
 
 
 def is_valid_chrome(chrome):
-    # A chromosome is valid if it has the form "chrX",
-    # where X is digit(s) or (X,Y,M)
+    # A chromosome is valid if it has the form "chrN" or "N",
+    # where N is one or more digits, or one of X,Y,M,MT
     return bool(re.match(r'^(chr)?([\d]+|[XYM]|(MT))$', chrome))
 
 

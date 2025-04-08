@@ -51,7 +51,7 @@ def set_regions(bam_path, gr, tmp_dir=None):
         return [gr.region_str]
 
     # get all chromosomes from the reference genome:
-    ref_chroms = gr.genome.get_chroms()
+    ref_chroms = gr.genome.get_chroms()  # TODO: does not guarantee str output, probably should
     if bam_path.endswith('.cram'):
         return list(sorted(ref_chroms, key=chromosome_order))
 
