@@ -36,6 +36,7 @@ class segmentor {
     void cost_memoization(std::vector<float*> &all_data);
     void load_dists(uint32_t *dists);
     std::vector<int> traceback(const int *T);
+    std::vector<std::tuple<int, int, double>> traceback_with_segment_scores(const int *T);
 public:
     segmentor(Params &iparams, std::vector<std::string> &input_beta_paths):
             beta_paths(input_beta_paths), params(iparams) {}

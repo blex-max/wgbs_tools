@@ -1,7 +1,7 @@
 //
 // Created by nloyfer on 11/2/18.
 //
-#include <stdexcept>
+#include <tuple>
 #include <limits>
 #include "segmentor.h"
 /**
@@ -31,6 +31,17 @@ void print_borders(std::vector<int> borders){
         printf("%d ", *i);
     printf("\n");
 }
+
+
+void print_segments_w_scores(const std::vector<std::tuple<int, int, double>> segments) {
+    for (size_t i = 0; i < segments.size(); ++i) {
+        int start = std::get<0>(segments[i]);
+        int end = std::get<1>(segments[i]);
+        double score = std::get<2>(segments[i]);
+        printf("%d %d %.4f\n", start, end, score);
+    }
+}
+
 
 void segmentor::load_dists(uint32_t *dists) {
 
@@ -110,6 +121,7 @@ void segmentor::cost_memoization(std::vector<float*> &all_data){
     delete[] ntotal;
 }
 
+
 std::vector<int> segmentor::traceback(const int *T) {
     std::vector<int> borders;
     int i = nr_sites;
@@ -119,6 +131,22 @@ std::vector<int> segmentor::traceback(const int *T) {
     }
     return borders;
 }
+
+
+std::vector<std::tuple<int, int, double>> segmentor::traceback_with_segment_scores(const int *T) {
+    std::vector<std::tuple<int, int, double>> segments;
+    int i = nr_sites;
+    while (i > 0) {
+        int start = std::max(0, T[i]);
+        int len = i - start;
+        double score = mem[start * max_cpg + len - 1];
+        segments.emplace_back(start, i, score);
+        i = start;
+    }
+    std::reverse(segments.begin(), segments.end());
+    return segments;
+}
+
 
 void segmentor::dp(std::vector<float*> &all_data){
 
@@ -150,10 +178,11 @@ void segmentor::dp(std::vector<float*> &all_data){
         M[i+1] = best_score;
         T[i+1] = best_ind;
     }
-    std::vector<int> borders = traceback(T);
-   // print_mem(mem, nr_sites, max_cpg);
+    std::vector<std::tuple<int, int, double>> borders = traceback_with_segment_scores(T);
+    // print_mem(mem, nr_sites, max_cpg);
     //print_MT(M, T, nr_sites);
-    print_borders(borders);
+    // print_borders(borders);
+    print_segments_w_scores(borders);
 
     delete [] mem; delete [] M; delete [] T;
 }
