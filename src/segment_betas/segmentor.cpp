@@ -4,9 +4,7 @@
 #include <tuple>
 #include <limits>
 #include "segmentor.h"
-/**
- * prints
- */
+
 
 //void print_mem(double *mem, int nr_sites, int max_cpg) {
     //std::cerr << "\ncost" << std::endl;
@@ -19,12 +17,14 @@
     //}
 //}
 
+
 //void print_MT(double *M, int *T, int nr_sites) {
     //std::cerr << "\nM" << '\t' << 'T' << std::endl;
     //for (int i = 0; i < nr_sites + 1; i++) {
         //std::cerr << M[i] << '\t' << T[i] << std::endl;
     //}
 //}
+
 
 void print_borders(std::vector<int> borders){
     for (auto i = borders.rbegin(); i != borders.rend(); ++i )
@@ -180,16 +180,15 @@ void segmentor::dp(std::vector<float*> &all_data){
     }
     std::vector<std::tuple<int, int, double>> borders = traceback_with_segment_scores(T);
     // print_mem(mem, nr_sites, max_cpg);
-    //print_MT(M, T, nr_sites);
+    // print_MT(M, T, nr_sites);
     // print_borders(borders);
     print_segments_w_scores(borders);
 
     delete [] mem; delete [] M; delete [] T;
 }
 
-/**
- *  Reading from files
- */
+
+// Reading from files
 void segmentor::read_beta_file(const char *beta_path, float *data){
     // load beta files section to a temporary array cdata
     auto cdata = new char[nr_sites * 2];
