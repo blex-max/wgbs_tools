@@ -51,8 +51,21 @@ def segment_process(params):
         cmd += f' -ps {params["pcount"]} -max_bp {params["max_bp"]} '
         chrom = index2chrom(start, params["genome"])
         cmd = f'tabix {params["revdict"]} {chrom}:{start}-{end - 1} | cut -f2 |' + cmd
-        brd_str = subprocess.check_output(cmd, shell=True).decode().split()
-        return np.array(list(map(int, brd_str))) + start
+        lines = subprocess.check_output(cmd, shell=True).decode().strip().splitlines()
+
+        segments = []
+        for line in lines:
+            try:
+                s, e, score = line.strip().split()
+                s, e = int(s) + start, int(e) + start  # adjust to genome coords
+                score = float(score)
+                segments.append((s, e, score))
+            except ValueError:
+                raise ValueError(f"Invalid segment line: {line}")
+
+        # return np.array([s for s, _, _ in segments] + [segments[-1][1]])  # return breakpoints as before, sans scores
+        return np.array(segments, dtype=[("start", "i"), ("end", "i"), ("score", "f")])
+
 
     except Exception as e:
         eprint(f'Failed in sites {sites}')
@@ -143,14 +156,17 @@ class SegmentByChunks:
         arr = p.starmap(segment_process, params)
         p.close()
         p.join()
+        breakpoint()
 
         # merge chunks from the same "tag" group
         # (i.e. the same chromosome, or the same region of the provided bed file)
         df = pd.DataFrame()
         for tag in set(tags):
             carr = [arr[i] for i in range(len(arr)) if tags[i] == tag]
+            breakpoint()
             merged = self.merge_df_list(carr)
             df = pd.concat([df, pd.DataFrame({'startCpG': merged[:-1], 'endCpG': merged[1:]})])
+        breakpoint()
         self.dump_result(df.reset_index(drop=True))
 
     def merge_df_list(self, dflist):
@@ -159,6 +175,8 @@ class SegmentByChunks:
         while len(dflist) > 1:
             p = Pool(self.args.threads)
             params = [(dflist[i - 1], dflist[i], self.param_dict) for i in range(1, len(dflist), 2)]
+            stitch_2_dfs(params[0][0], params[0][1], self.param_dict)
+            breakpoint()
             arr = p.starmap(stitch_2_dfs, params)
             p.close()
             p.join()
@@ -202,6 +220,7 @@ class SegmentByChunks:
 def stitch_2_dfs(b1, b2, params):
 
     # if b2 is not the direct extension of b1, we have a problem
+    breakpoint()
     if b1[-1] != b2[0]:
         msg = '[wt segment] Patch stitching Failed! ' \
               '             patches are not supposed to be merged'
