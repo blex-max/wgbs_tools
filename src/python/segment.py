@@ -17,6 +17,7 @@ from convert import add_bed_to_cpgs
 from genomic_region import GenomicRegion, index2chrom
 from beta_to_blocks import load_blocks_file
 from numpy.typing import NDArray, ArrayLike
+import math
 
 
 DEF_CHUNK = 60000
@@ -77,10 +78,9 @@ def simple_run(
     args,  # not ideal, but easier not to fix now
     betas
 ):
-    # don't multiprocess
+    # don't multiprocess - simplifies changes and saves memory
     # chunk, run the C++ iteratively
     # run segementation again between chunks to find overlap
-    # stream output, save memory
     # match previous output format, with score on the end
     genome = GenomeRefPaths(args.genome)
     for beta in betas:
@@ -134,7 +134,8 @@ def simple_run(
 
     # having generated dataframe of regions above
     ### RUN BY REGION, BY CHUNK
-    # don't merge between regions
+    # don't segment-merge between regions
+    result_df = pd.DataFrame(columns=['startCpG', 'endCpG', 'score'])
     for _, row in bed_df.iterrows():  # row per region
         start, end = row
         chunk_borders = list(range(start, end, args.chunk_size)) + [end]
@@ -152,7 +153,11 @@ def simple_run(
         # in neighbour pairs to prioritise preservation of local information
         # (for loop wrapped in while loop)
         merging_segmentations: list[NDArray] = chunk_segmentations
+        maxiter = math.ceil(math.log2(len(merging_segmentations))) + 1
+        niter = 0
         while len(merging_segmentations) != 1:
+            if niter > maxiter:
+                raise RuntimeError  # panic
             pairwise_merges: list[NDArray] = []
             for i in range(0, len(merging_segmentations) - 1, 2):
                 # merge candidate chunks
@@ -200,10 +205,16 @@ def simple_run(
                 # breakpoint()
             odd_straggler = [merging_segmentations[-1]] if len(merging_segmentations) % 2 else []
             merging_segmentations = pairwise_merges + odd_straggler
+            if len(merging_segmentations) < 1:
+                raise RuntimeError  # panic
+            niter += 1
             # breakpoint()
-        # breakpoint()
-        ### TODO: WRITE PER REGION
-    # breakpoint()
+        result_df = pd.concat([result_df, pd.DataFrame(merging_segmentations[0], columns=result_df.columns)], ignore_index=True)
+    breakpoint()
+    ### TODO: write out
+    # favour conversion to format that previous code understands for the sake of time, and avoiding introducing discrepancies, w.r.t. dump_result()
+    # could dump by region to save memory if needed, lets see
+    # will need to extract dump_result to some extent to stitch scores back
 
 def find_overlap(df1: NDArray, df2: NDArray) -> int | None:
     # get starts and ends as 1D array for each df
