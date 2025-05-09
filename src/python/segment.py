@@ -16,7 +16,7 @@ from utils_wgbs import IllegalArgumentError, eprint, segment_tool, add_GR_args, 
 from convert import add_bed_to_cpgs
 from genomic_region import GenomicRegion, index2chrom
 from beta_to_blocks import load_blocks_file
-from numpy.typing import NDArray, ArrayLike
+from numpy.typing import NDArray
 import math
 
 
@@ -157,7 +157,7 @@ def simple_run(
         niter = 0
         while len(merging_segmentations) != 1:
             if niter > maxiter:
-                raise RuntimeError  # panic
+                raise RuntimeError('chunk merging seems to have exceeded a sensible number of iterations')  # panic
             pairwise_merges: list[NDArray] = []
             for i in range(0, len(merging_segmentations) - 1, 2):
                 # merge candidate chunks
@@ -206,15 +206,46 @@ def simple_run(
             odd_straggler = [merging_segmentations[-1]] if len(merging_segmentations) % 2 else []
             merging_segmentations = pairwise_merges + odd_straggler
             if len(merging_segmentations) < 1:
-                raise RuntimeError  # panic
+                raise RuntimeError('chunk merging failed for unknown reason')  # panic
             niter += 1
             # breakpoint()
-        result_df = pd.concat([result_df, pd.DataFrame(merging_segmentations[0], columns=result_df.columns)], ignore_index=True)
-    breakpoint()
+        if result_df.empty:  # satisfy pandas futurewarning about upcoming changes to concat
+            result_df = pd.DataFrame(merging_segmentations[0], columns=result_df.columns)
+        else:
+            result_df = pd.concat([result_df, pd.DataFrame(merging_segmentations[0], columns=result_df.columns)], ignore_index=True)
+    # breakpoint()
     ### TODO: write out
     # favour conversion to format that previous code understands for the sake of time, and avoiding introducing discrepancies, w.r.t. dump_result()
     # could dump by region to save memory if needed, lets see
     # will need to extract dump_result to some extent to stitch scores back
+    # convert result and dump; mostly lifted wholesale from original implemenation
+    nr_blocks = result_df.shape[0]
+    result_df.sort_values(by=['startCpG'], inplace=True)
+    result_df = result_df[result_df.endCpG - result_df.startCpG > args.min_cpg - 1].reset_index(drop=True)
+
+    nr_blocks_filt = result_df.shape[0]
+    nr_dropped = nr_blocks - nr_blocks_filt
+    eprint(f'[wt segment] found {nr_blocks_filt:,} blocks\n' \
+           f'             (dropped {nr_dropped:,} short blocks)')
+
+    # add genomic loci and dump/print
+    temp_path = next(tempfile._get_candidate_names())
+    temp_path2 = next(tempfile._get_candidate_names())
+    df_for_addbed = result_df.iloc[:, :2]  # drop scores
+    try:
+        df_for_addbed.to_csv(temp_path, sep='\t', header=None, index=None)
+        add_bed_to_cpgs(temp_path, genome.genome, temp_path2)
+    except:
+        raise RuntimeError('error writing intermediate data to disk') # panic
+    finally:
+        if op.isfile(temp_path):
+            os.remove(temp_path)
+    result_w_loci = pd.read_csv(temp_path2, sep='\t', header=None)
+    if result_w_loci.shape[0] != result_df.shape[0]:
+        raise RuntimeError('number of blocks unexpectedly changed after adding loci')  # panic
+    final_df = pd.concat([result_w_loci, result_df.iloc[:, -1]], axis=1)  # re-add scoring
+    final_df.to_csv(str(args.out_path), sep='\t', header=None, index=None)
+
 
 def find_overlap(df1: NDArray, df2: NDArray) -> int | None:
     # get starts and ends as 1D array for each df
@@ -325,17 +356,14 @@ class SegmentByChunks:
         arr = p.starmap(segment_process, params)
         p.close()
         p.join()
-        breakpoint()
 
         # merge chunks from the same "tag" group
         # (i.e. the same chromosome, or the same region of the provided bed file)
         df = pd.DataFrame()
         for tag in set(tags):
             carr = [arr[i] for i in range(len(arr)) if tags[i] == tag]
-            breakpoint()
             merged = self.merge_df_list(carr)
             df = pd.concat([df, pd.DataFrame({'startCpG': merged[:-1], 'endCpG': merged[1:]})])
-        breakpoint()
         self.dump_result(df.reset_index(drop=True))
 
     def merge_df_list(self, dflist):
@@ -344,9 +372,6 @@ class SegmentByChunks:
         while len(dflist) > 1:
             p = Pool(self.args.threads)
             params = [(dflist[i - 1], dflist[i], self.param_dict) for i in range(1, len(dflist), 2)]
-            # added single initial call outside of pool for debug/testing
-            stitch_2_dfs(params[0][0], params[0][1], self.param_dict)
-            breakpoint()
             arr = p.starmap(stitch_2_dfs, params)
             p.close()
             p.join()
@@ -373,6 +398,7 @@ class SegmentByChunks:
 
         # add genomic loci and dump/print
         temp_path = next(tempfile._get_candidate_names())
+        breakpoint()
         try:
             df.to_csv(temp_path, sep='\t', header=None, index=None)
             add_bed_to_cpgs(temp_path, self.genome.genome, self.args.out_path)
@@ -390,7 +416,6 @@ class SegmentByChunks:
 def stitch_2_dfs(b1, b2, params):
 
     # if b2 is not the direct extension of b1, we have a problem
-    breakpoint()
     if b1[-1] != b2[0]:
         msg = '[wt segment] Patch stitching Failed! ' \
               '             patches are not supposed to be merged'
@@ -405,43 +430,6 @@ def stitch_2_dfs(b1, b2, params):
         # calculate blocks for patch:
         start = b1[-1] - patch1_size #- 1
         end = b1[-1] + patch2_size
-        cparams = dict(params, **{'sites': (start, end)})
-        patch = segment_process(cparams)
-
-        # find the overlaps
-        if is_2_overlap(b1, patch) and is_2_overlap(patch, b2):
-            # successful stitch with patches
-            return merge2(merge2(b1, patch), b2)
-        else:
-            # failed stitch - increase patch sizes
-            if not is_2_overlap(b1, patch):
-                patch1_size = increase_patch(patch1_size, n1)
-            if not is_2_overlap(patch, b2):
-                patch2_size = increase_patch(patch2_size, n2)
-
-    # Failed: could not stich the two chuncks
-    msg = '[wt segment] Patch stitching Failed! ' \
-          '             Try increasing chunk size (--chunk_size flag)'
-    raise IllegalArgumentError(msg)
-
-
-def stitch_scored_chunks(b1: NDArray, b2: NDArray, params: dict):
-    # if b2 is not the direct extension of b1, we have a problem
-    breakpoint()
-    if b1[-1][1] != b2[0][0]:
-        msg = '[wt segment] Patch stitching Failed! ' \
-              '             patches are not supposed to be merged'
-        raise IllegalArgumentError(msg)
-
-    n1 = b1[-1][1] - b1[0][0]  # size, end of chunk - start
-    n2 = b2[-1][1] - b2[0][0]  # as above
-    patch1_size = min(50, n1)
-    patch2_size = min(50, n2)
-    patch = np.array([], dtype=int)
-    while patch1_size <= n1 and patch2_size <= n2:
-        # calculate blocks for patch:
-        start = b1[-1][1] - patch1_size #- 1
-        end = b1[-1][1] + patch2_size
         cparams = dict(params, **{'sites': (start, end)})
         patch = segment_process(cparams)
 
