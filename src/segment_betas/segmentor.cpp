@@ -1,6 +1,8 @@
 //
 // Created by nloyfer on 11/2/18.
 //
+// ab: small updates by blex-max to emit segmentation scoring 05/2025
+//
 #include <tuple>
 #include <limits>
 #include "segmentor.h"
