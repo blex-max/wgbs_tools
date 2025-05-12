@@ -1,0 +1,20 @@
+# dev
+.env/
+src/python/__pycache__/
+scratch
+# runtime
+references/
+# compiled tools
+src/cpg2bed/add_loci
+src/cview/cview
+src/homog/homog
+src/pat2beta/mask_pat
+src/pat2beta/stdin2beta
+src/pat_sampler/pat_sampler
+src/pipeline_wgbs/add_cpg_counts
+src/pipeline_wgbs/blueprint/patter
+src/pipeline_wgbs/match_maker
+src/pipeline_wgbs/patter
+src/pipeline_wgbs/snp_patter
+src/segment_betas/segmentor
+*.o
