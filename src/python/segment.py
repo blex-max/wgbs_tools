@@ -42,35 +42,58 @@ def is_block_file_nice(df):
 def segment_process(params):
     sites = params['sites']
     start, end = sites
+    # testing
+    if not isinstance(start, int) or not isinstance(end, int):
+        raise TypeError(f'start and end should be type int, not {type(start)}, {type(end)}')
+
     assert end - start > 0, f'trying to segment an empty interval {sites}'
+
     if end - start == 1:
         return np.array([start, end])
+
+    beta_files = ' '.join(params['betas'])
+    cmd = f'{segment_tool} {beta_files} '
+    cmd += f'-s {start - 1} -n {end - start} -max_cpg {params["max_cpg"]} '  # testing no -1
+    cmd += f' -ps {params["pcount"]} -max_bp {params["max_bp"]} '
+    chrom = index2chrom(start, params["genome"])
+    cmd = f'tabix {params["revdict"]} {chrom}:{start}-{end - 1} | cut -f2 |' + cmd
+
+    if 17274320 > start > 17274300:
+        breakpoint()
+
     try:
-        beta_files = ' '.join(params['betas'])
-        cmd = f'{segment_tool} {beta_files} '
-        cmd += f'-s {start - 1} -n {end - start} -max_cpg {params["max_cpg"]} '
-        cmd += f' -ps {params["pcount"]} -max_bp {params["max_bp"]} '
-        chrom = index2chrom(start, params["genome"])
-        cmd = f'tabix {params["revdict"]} {chrom}:{start}-{end - 1} | cut -f2 |' + cmd
-        lines = subprocess.check_output(cmd, shell=True).decode().strip().splitlines()
-
-        segments = []
-        for line in lines:
-            try:
-                s, e, score = line.strip().split()
-                s, e = int(s) + start, int(e) + start  # ab: adjust to genome coords
-                score = float(score)
-                segments.append((s, e, score))
-            except ValueError:
-                raise ValueError(f"Invalid segment line: {line}")
-
-        # return np.array([s for s, _, _ in segments] + [segments[-1][1]])  # ab: return breakpoints as before, sans scores
-        return np.array(segments, dtype=np.float32)
-
-
+        proc = subprocess.run(
+                            cmd,
+                            shell=True,
+                            capture_output=True,
+                            text=True,
+                            check=True
+                        )
+    except subprocess.CalledProcessError as e:
+        eprint(f'Call to segmentor failed over {sites}')
+        print(f'Dumping stderr:\n{e.stderr}')
+        print(f'Dumping stdout:\n{e.stdout}')
+        breakpoint()
+        raise e
     except Exception as e:
         eprint(f'Failed in sites {sites}')
+        breakpoint()
         raise e
+
+    lines = proc.stdout.strip().splitlines()
+    # breakpoint()
+    segments = []
+    for line in lines:
+        try:
+            s, e, score = line.strip().split()
+            s, e = int(s) + start, int(e) + start  # ab: adjust to genome coords
+            score = float(score)
+            segments.append((s, e, score))
+        except ValueError:
+            raise ValueError(f"Invalid segment line: {line}")
+
+    # return np.array([s for s, _, _ in segments] + [segments[-1][1]])  # ab: return breakpoints as before, sans scores
+    return np.array(segments, dtype=np.float32)
 
 
 def simple_run(
@@ -134,7 +157,9 @@ def simple_run(
     ### RUN BY REGION, BY CHUNK
     # don't merge between regions
     result_df = pd.DataFrame(columns=['startCpG', 'endCpG', 'score'])
-    for _, row in bed_df.iterrows():  # ab: row per region
+    for chridx, row in bed_df.iterrows():  # ab: row per region
+        # if chridx == 11:
+            # breakpoint()
         start, end = row
         chunk_borders = list(range(start, end, args.chunk_size)) + [end]
         chunk_segmentations: list[NDArray] = []
@@ -155,6 +180,8 @@ def simple_run(
             if niter > maxiter:
                 raise RuntimeError('chunk merging seems to have exceeded a sensible number of iterations')  # ab: panic
             pairwise_merges: list[NDArray] = []
+            # if chridx == 11:
+                # breakpoint()
             for i in range(0, len(merging_segmentations) - 1, 2):
                 # ab: mc = "merge candidate" chunks
                 mc1 = merging_segmentations[i]
@@ -171,8 +198,8 @@ def simple_run(
                 patch = np.array([], dtype=int)
                 while patch1_size <= n1 and patch2_size <= n2:
                     # calculate blocks for patch:
-                    start = mc1[-1][1] - patch1_size #- 1
-                    end = mc1[-1][1] + patch2_size
+                    start = int(mc1[-1][1] - patch1_size) #- 1
+                    end = int(mc1[-1][1] + patch2_size)
                     patch_params = dict(params, **{'sites': (start, end)})
                     patch = segment_process(patch_params)
 
@@ -197,7 +224,6 @@ def simple_run(
                     msg = '[wt segment] Patch stitching Failed! ' \
                           '             Try increasing chunk size (--chunk_size flag)'
                     raise IllegalArgumentError(msg)
-                # breakpoint()
             odd_straggler = [merging_segmentations[-1]] if len(merging_segmentations) % 2 else []
             merging_segmentations = pairwise_merges + odd_straggler
             if len(merging_segmentations) < 1:
@@ -208,6 +234,7 @@ def simple_run(
         else:
             result_df = pd.concat([result_df, pd.DataFrame(merging_segmentations[0], columns=result_df.columns)], ignore_index=True)
     # ab: convert result and dump; mostly lifted wholesale from original implemenation to avoid introducing discrepancies
+    breakpoint()
     nr_blocks = result_df.shape[0]
     result_df.sort_values(by=['startCpG'], inplace=True)
     result_df = result_df[result_df.endCpG - result_df.startCpG > args.min_cpg - 1].reset_index(drop=True)
@@ -223,12 +250,17 @@ def simple_run(
     df_for_addbed = result_df.iloc[:, :2]  # drop scores
     try:
         df_for_addbed.to_csv(temp_path, sep='\t', header=None, index=None)
-        add_bed_to_cpgs(temp_path, genome.genome, temp_path2)
-    except:
+    except Exception as e:
+        breakpoint()
         raise RuntimeError('error writing intermediate data to disk') # panic
-    finally:
-        if op.isfile(temp_path):
-            os.remove(temp_path)
+    try:
+        add_bed_to_cpgs(temp_path, genome.genome, temp_path2)
+    except Exception as e:
+        breakpoint()
+        raise RuntimeError
+
+    if op.isfile(temp_path):
+        os.remove(temp_path)
     try:
         result_w_loci = pd.read_csv(temp_path2, sep='\t', header=None)
     except:
@@ -240,38 +272,72 @@ def simple_run(
     final_df.to_csv(str(args.out_path), sep='\t', header=None, index=None)
 
 
+# def find_overlap(df1: NDArray, df2: NDArray) -> int | None:
+#     """
+#     check for overlap in data of rows of first 2 cols of 2 dataframes
+#     """
+#     # ab:
+#     # get starts and ends as 1D array for each df
+#     # make that 1D array unique
+#     # then check for overlap between the two
+#     df1_bps = np.unique(df1[1:, :2].flatten())  # breakpoints
+#     df2_bps = np.unique(df2[:-1, :2].flatten())
+#     dups = np.isin(df1_bps, df2_bps)
+#     if np.any(dups):
+#         return df1_bps[dups][0]
+#     else:
+#         return None
+
+
 def find_overlap(df1: NDArray, df2: NDArray) -> int | None:
     """
-    check for overlap in data of rows of first 2 cols of 2 dataframes
+    check for identical value in segment ends of df1 and segment starts of df2
     """
     # ab:
     # get starts and ends as 1D array for each df
     # make that 1D array unique
     # then check for overlap between the two
-    df1_bps = np.unique(df1[1:, :2].flatten())  # breakpoints
-    df2_bps = np.unique(df2[:-1, :2].flatten())
+    df1_bps = np.unique(df1[1:, 1].flatten())  # ends
+    df2_bps = np.unique(df2[:-1, 0].flatten())  # starts
     dups = np.isin(df1_bps, df2_bps)
     if np.any(dups):
         return df1_bps[dups][0]
     else:
         return None
 
+
+# the overlap: int type assertion isn't actually respected in the code
 def merge_segmentations(df1: NDArray, df2: NDArray, overlap: int) -> NDArray:
     """
     given unique segment coordinate (overlap) where two dataframes should overlap,
     find rows where overlap coordinate appears in df1 segment end coordinates
     and df2 segment start coordinates, and merge at that point
     """
-    df1_ol_idx = np.argwhere(df1[:, 1] == overlap)  # ab: first occurence should be an end, since each coord should appear twice, once as an end, once as a start
-    df2_ol_idx = np.argwhere(df2[:, 0] == overlap)
+    # N.B. TODO: document the two edge cases I've found
+    
+    # C++ can skip coords, so no guarantee re starts/ends
+    # This wasn't exposed until I changed the traceback to include scores
+    # TODO: fix
+    # attempted to fix by making the find overlap only look in ends and starts
+    df1_ol_idc = np.argwhere(df1[:, 1] == overlap)  # end
+    df2_ol_idc = np.argwhere(df2[:, 0] == overlap)  # start
 
-    if df1_ol_idx.size != 1 or df2_ol_idx.size != 1:
-        raise ValueError
-    else:
-        df1_row = df1_ol_idx[0][0]  # ab: where overlap is segement end
-        df2_row = df2_ol_idx[0][0]  # ab: where start
+    # the C++ shouldn't, but does, produce 0 length blocks so we can't do this
+    # if df1_ol_idx.size != 1 or df2_ol_idx.size != 1:
+    #     breakpoint()
+    #     raise RuntimeError('overlap coordinate appears more than once in chunk')
+    # instead we just do first occurrence as in original implementation
+    if df1_ol_idc.size < 1 or df2_ol_idc.size < 1:
+        raise RuntimeError('overlap not found in chunks to merge!')
 
-    return np.concatenate([df1[:df1_row + 1], df2[df2_row:]])
+    df1_row = int(df1_ol_idc[0][0])  # ab: where overlap is segement end
+    df2_row = int(df2_ol_idc[0][0])  # ab: where start
+
+    # I think doing this may quietly drops length 0 blocks?
+    df1_row += 1 # retain overlap row from df1
+    df2_row += 1 # skip that block in df2
+
+    return np.concatenate([df1[:df1_row], df2[df2_row:]])
 
 
 def increase_patch(pre_size, maxval):
@@ -338,6 +404,7 @@ def main():
     args = parse_args()
     validate_local_exe(segment_tool)
     betas = parse_betas_input(args)
+    breakpoint()
     simple_run(
         args,
         betas
