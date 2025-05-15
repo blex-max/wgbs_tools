@@ -2,7 +2,6 @@ import subprocess
 import os
 import os.path as op
 from io import StringIO
-import multiprocessing
 import sys
 from pathlib import Path
 import shutil

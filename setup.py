@@ -1,11 +1,10 @@
 #!/usr/bin/python3 -u
 
 import os
-import sys
 import os.path as op
 import argparse
 import subprocess
-from src.python.utils_wgbs import eprint, validate_single_file, IllegalArgumentError
+from src.python.utils_wgbs import eprint
 
 
 def parse_args():
