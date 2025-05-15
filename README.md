@@ -13,7 +13,7 @@ These can be visualized in terminal, or analyzed in different ways - subsample, 
 This project is developed by Netanel Loyfer and Jonathan Rosenski in [Prof. Tommy Kaplan's lab](https://www.cs.huji.ac.il/~tommy/) at the Hebrew University, Jerusalem, Israel.
 
 ## FORK CHANGELOG
-15/05/2025:
+15/05/2025 - changes made to `segment` command:
 - segmentor.cpp algorithm changed to emit segment scores
 - segment.py wrapper changed to accomdate the above
 - multiprocessing made more polite, stopped massive memory grab, default to 1 thread
