@@ -28,6 +28,7 @@
 //}
 
 
+// ab: original result printing
 void print_borders(std::vector<int> borders){
     for (auto i = borders.rbegin(); i != borders.rend(); ++i )
         printf("%d ", *i);
@@ -35,6 +36,7 @@ void print_borders(std::vector<int> borders){
 }
 
 
+// ab: alternative printing with segment scores
 void print_segments_w_scores(const std::vector<std::tuple<int, int, double>> segments) {
     for (size_t i = 0; i < segments.size(); ++i) {
         int start = std::get<0>(segments[i]);
@@ -124,26 +126,27 @@ void segmentor::cost_memoization(std::vector<float*> &all_data){
 }
 
 
-std::vector<int> segmentor::traceback(const int *T) {
-    std::vector<int> borders;
-    int i = nr_sites;
-    borders.push_back(i);
-    while (i > 0) {
-        borders.push_back(i = std::max(0, T[i]));
-    }
-    return borders;
-}
+// ab: original traceback
+// std::vector<int> segmentor::traceback(const int *T) {
+//     std::vector<int> borders;
+//     int i = nr_sites;
+//     borders.push_back(i);
+//     while (i > 0) {
+//         borders.push_back(i = std::max(0, T[i]));
+//     }
+//     return borders;
+// }
 
 
+// ab: alternative traceback retrieving score for each segment found
 std::vector<std::tuple<int, int, double>> segmentor::traceback_with_segment_scores(const int *T) {
     std::vector<std::tuple<int, int, double>> segments;
     int i = nr_sites;
     while (i > 0) {
-        int start = std::max(0, T[i]);
-        int len = i - start;
-        double score = mem[start * max_cpg + len - 1];
-        segments.emplace_back(start, i, score);
-        i = start;
+        int k = std::max(0, T[i]);  // segment start
+        double score = mem[k * max_cpg + i - k];
+        segments.emplace_back(k, i, score);
+        i = k;
     }
     std::reverse(segments.begin(), segments.end());
     return segments;
