@@ -82,11 +82,11 @@ def segment_process(params):
             gn_block_start = int(block_start_str) + gn_start
             gn_block_end = int(block_end_str) + gn_start  # ab: adjust to genome coords
             score = float(score_str)
-            if gn_block_start < gn_start:
-                RuntimeError('block underflow!')
-            segments.append((gn_block_start, gn_block_end, score))
-        except ValueError:
-            raise ValueError(f"Invalid segment line: {line}")
+        except Exception as e:
+            raise RuntimeError(f"Invalid segment line: {line}\nreporting: {e}")
+        if gn_block_start < gn_start:
+            RuntimeError('block underflow!')
+        segments.append((gn_block_start, gn_block_end, score))
 
     # return np.array([s for s, _, _ in segments] + [segments[-1][1]])  # ab: return breakpoints as before, sans scores
     # ab: ensuring 64 bit precision is critical to avoid bugs
@@ -279,13 +279,9 @@ def find_overlap(arr1: NDArray, arr2: NDArray) -> int | None:
 
 # ab: new merge funcs
 # ab:
-# extremely rare edge case where this merge causes the output not to match original implementation
-# 1 occurence over all blocks reported for hg19
-# I have not looked into the cause at this time
-# I won't do so unless it's requested/it's decided the discrepancy is non-trivial
-# It's almost certainly to do with the assumption that the breakpoint should first be an end in arr1
-# then a start in arr2, or because we're keeping the overlap row from arr1
-# and in the original implementation it keeps from arr2, or some combination of these possibilites
+# extremely rare edge case where this merge causes the output not to match original implementation.
+# Unavoidable, as cannot be removed without making segment score meaningless. Arguably this is the
+# more robust implementation. 1 occurence over all blocks reported for hg19
 def overlap_merge(arr1: NDArray, arr2: NDArray, overlap: int) -> NDArray:
     """
     given unique segment coordinate (overlap) where two dataframes should overlap,
