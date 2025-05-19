@@ -18,7 +18,7 @@ This project is developed by Netanel Loyfer and Jonathan Rosenski in [Prof. Tomm
 - segment.py wrapper changed to accomdate the above
 - multiprocessing made more polite, stopped massive memory grab, default to 1 thread
 - installation instructions changed in README.md to include installation of python deps into venv
-- added check for python version 3.7-3.11 in installation instructions - possibly unneeded as not commented upon in original README.md, but done in the pyproject.toml
+- minor bugfixes
 
 ## Quick start
 ### Installation
@@ -29,7 +29,6 @@ git clone https://github.com/nloyfer/wgbs_tools.git
 cd wgbs_tools
 
 # install dependecies and compile
-case "$(python --version 2>&1)" in Python\ 3\.[7-9]*|Python\ 3\.1[0-1]*) ;; *) echo "Error: Python 3.7–3.11 required, found $(python --version 2>&1)" >&2; exit 1;; esac
 python -m venv .env
 source .env/bin/activate
 pip install pandas numpy scipy
