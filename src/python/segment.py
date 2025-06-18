@@ -280,8 +280,18 @@ def find_overlap(arr1: NDArray, arr2: NDArray) -> int | None:
 # ab: new merge funcs
 # ab:
 # extremely rare edge case where this merge causes the output not to match original implementation.
-# Unavoidable, as cannot be removed without making segment score meaningless. Arguably this is the
-# more robust implementation. 1 occurence over all blocks reported for hg19
+# since this implementation reports scores with segments, overlap must be found via a shared coordinate
+# representing a segment end in arr1, and start in arr2, such that arrays can be merged seamlessly as:
+# start, END, score
+# START, end, score
+# in the original implementation, there was no concept of start/end, only segment breakpoints. Therefore
+# in rare cases an overlap would be found that is not replicable in the new system, e.g. an overlap where
+# both breakpoint coordinates represent end coordinates with respect to the new, scored implementation.
+# Hence the discrepancy is unavoidable, as it cannot be removed without making segment score meaningless.
+# Arguably this is the more robust implementation, since segments were always scored,
+# and in the underlying c++ always had a concept of start/end. However this was not previously exposed to the
+# python wrapper and was therefore ignored. 
+# 1 occurence of this discrepancy over all blocks reported for hg19
 def overlap_merge(arr1: NDArray, arr2: NDArray, overlap: int) -> NDArray:
     """
     given unique segment coordinate (overlap) where two dataframes should overlap,
